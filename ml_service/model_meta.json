@@ -1,0 +1,23 @@
+{
+  "model_name": "scikit_learn_fuel_cost",
+  "model_version": "rf_v2.0",
+  "algorithm": "RandomForestRegressor (MultiOutput)",
+  "features": [
+    "distance_km",
+    "vehicle_efficiency_kml",
+    "load_level_multiplier",
+    "passenger_count",
+    "fuel_price",
+    "road_profile_multiplier"
+  ],
+  "training_samples": 36720,
+  "test_samples": 6480,
+  "r2_fuel_liters": 0.9999,
+  "r2_predicted_cost": 0.9992,
+  "mae_fuel_liters": 0.0336,
+  "mae_predicted_cost": 10.2729,
+  "rmse_fuel_liters": 0.0547,
+  "rmse_predicted_cost": 15.4714,
+  "trained_at": "2026-09-29 02:56:43",
+  "training_duration_seconds": 3.46
+}
