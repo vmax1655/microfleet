@@ -18,12 +18,16 @@ class Costs extends Component
     public function mount(): void
     {
         $this->selected_trip = 'all';
+
+        // Auto-synchronize rollups if any trips exist without transport cost records
+        if (TransportCost::count() < Trip::count()) {
+            $this->syncAllTripCosts();
+        }
     }
 
     public function openRecalculateModal(): void
     {
         $this->selected_trip = 'all';
-        $this->dispatch('open-modal', 'recalculate-cost');
     }
 
     public function recalculate(): void
@@ -74,15 +78,24 @@ class Costs extends Component
 
     private function syncTripCost(Trip $trip): TransportCost
     {
-        $trip->loadMissing(['fuelTransactions', 'expenses', 'transportCost', 'dispatch.reservation.route', 'route', 'vehicle.type']);
+        $trip->load(['fuelTransactions', 'expenses', 'transportCost', 'dispatch.reservation.route', 'route', 'vehicle.type']);
 
-        $fuelCost = (float) $trip->fuelTransactions->sum('total_cost');
+        $fuelCost = (float) $trip->fuelTransactions()->sum('total_cost');
 
-        $expenseCost = (float) $trip->expenses
+        $expenseCost = (float) $trip->expenses()
             ->whereIn('approval_status', ['approved', 'checked', 'pending'])
             ->sum('amount');
 
         $distance = max((float) ($trip->distance_km ?? 0), 0);
+        if ($distance <= 0 && $trip->end_odometer_km && $trip->start_odometer_km && (float) $trip->end_odometer_km > (float) $trip->start_odometer_km) {
+            $distance = round((float) $trip->end_odometer_km - (float) $trip->start_odometer_km, 2);
+        }
+        if ($distance <= 0) {
+            $distance = (float) ($trip->route?->planned_distance_km ?? $trip->dispatch?->reservation?->route?->planned_distance_km ?? 0);
+        }
+        if ($distance > 0 && empty($trip->distance_km)) {
+            $trip->update(['distance_km' => $distance]);
+        }
 
         // Standard maintenance allocation per kilometer based on vehicle classification
         $maintRate = match (strtolower($trip->vehicle?->type?->name ?? '')) {

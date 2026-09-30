@@ -29,13 +29,17 @@ Route::match(['get', 'post'], '/logout', function () {
     request()->session()->regenerateToken();
 
     if (request()->query('reason') === 'timeout') {
-        return redirect()->route('login')->with('status', 'Your session expired due to 5 minutes of inactivity. Please sign in again.');
+        return redirect()->route('login')->with('status', 'Your session expired due to inactivity. Please sign in again.');
     }
 
     return redirect()->route('login');
 })->name('logout');
 
 Route::middleware('auth')->group(function () {
+    Route::get('/session/keepalive', function () {
+        return response()->json(['status' => 'active', 'timestamp' => now()->timestamp]);
+    })->name('session.keepalive');
+
     Route::get('/security/two-factor', App\Livewire\Auth\TwoFactorSettings::class)->name('security.two-factor');
 
     Route::post('/depot/switch', function (\Illuminate\Http\Request $request) {

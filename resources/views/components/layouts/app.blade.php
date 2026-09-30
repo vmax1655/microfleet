@@ -56,9 +56,9 @@
         </div>
     </div>
 
-    {{-- Inactivity Session Timeout Monitor (5 Minutes) --}}
+    {{-- Inactivity Session Timeout Monitor --}}
     <div x-data="sessionTimeoutTracker()"
-         x-init="startTimer()"
+         x-init="initTracker()"
          @mousemove.window.passive="onActivity()"
          @keydown.window.passive="onActivity()"
          @click.window.passive="onActivity()"
@@ -72,7 +72,8 @@
          x-transition:leave="transition ease-in duration-200"
          x-transition:leave-start="opacity-100 translate-y-0 scale-100"
          x-transition:leave-end="opacity-0 translate-y-4 scale-95"
-         class="fixed bottom-5 right-5 z-[80] max-w-sm rounded-[12px] border border-amber-300 bg-white p-4 shadow-flyout text-neutral-800"
+         class="fixed bottom-5 right-5 z-[999999] max-w-sm rounded-[12px] border border-amber-300 bg-white p-4 shadow-flyout text-neutral-800"
+         style="z-index: 999999 !important;"
          role="alert">
         <div class="flex items-start gap-3">
             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700">
@@ -81,8 +82,8 @@
             <div class="min-w-0 flex-1">
                 <p class="text-sm font-semibold text-neutral-900">Session Expiring</p>
                 <p class="mt-1 text-xs text-neutral-600">
-                    You have been inactive for over 4 minutes. Your session will automatically close in
-                    <strong class="tabular-nums font-bold text-amber-700" x-text="countdown">30</strong> seconds.
+                    You have been inactive. For your security, your session will automatically close in
+                    <strong class="tabular-nums font-bold text-amber-700" x-text="countdown">60</strong> seconds.
                 </p>
                 <div class="mt-3 flex items-center gap-2">
                     <button type="button"
@@ -102,42 +103,65 @@
     <script>
         function sessionTimeoutTracker() {
             return {
-                totalSeconds: 300,        // 5 minutes total timeout
-                warningSeconds: 30,       // Show warning at last 30 seconds
-                remaining: 300,
+                idleTimeoutSeconds: 900,   // 15 minutes of inactivity before warning
+                warningSeconds: 60,        // 60-second warning countdown before auto logout
+                lastActivityTime: Date.now(),
+                lastPingTime: Date.now(),
                 showWarning: false,
-                countdown: 30,
+                countdown: 60,
                 timerInterval: null,
 
-                startTimer() {
-                    this.remaining = this.totalSeconds;
+                initTracker() {
+                    this.lastActivityTime = Date.now();
+                    this.lastPingTime = Date.now();
                     if (this.timerInterval) clearInterval(this.timerInterval);
 
                     this.timerInterval = setInterval(() => {
-                        this.remaining--;
+                        const now = Date.now();
+                        const idleSeconds = Math.floor((now - this.lastActivityTime) / 1000);
 
-                        if (this.remaining <= this.warningSeconds && this.remaining > 0) {
-                            this.showWarning = true;
-                            this.countdown = this.remaining;
-                        } else if (this.remaining <= 0) {
+                        if (idleSeconds >= this.idleTimeoutSeconds + this.warningSeconds) {
                             clearInterval(this.timerInterval);
                             window.location.href = "{{ route('logout', ['reason' => 'timeout']) }}";
+                        } else if (idleSeconds >= this.idleTimeoutSeconds) {
+                            this.showWarning = true;
+                            this.countdown = (this.idleTimeoutSeconds + this.warningSeconds) - idleSeconds;
+                        } else {
+                            this.showWarning = false;
                         }
                     }, 1000);
                 },
 
                 onActivity() {
-                    // Only reset if warning is not active; when warning is active, user explicitly clicks Stay Signed In
-                    if (!this.showWarning) {
-                        this.remaining = this.totalSeconds;
+                    this.lastActivityTime = Date.now();
+                    if (this.showWarning) {
+                        this.showWarning = false;
+                        this.pingServer();
+                    }
+
+                    // Throttle keepalive ping to server: at most once every 2 minutes while active
+                    const now = Date.now();
+                    if (now - this.lastPingTime > 120000) {
+                        this.pingServer();
                     }
                 },
 
                 keepAlive() {
-                    this.remaining = this.totalSeconds;
+                    this.lastActivityTime = Date.now();
                     this.showWarning = false;
-                    // Ping the server to refresh Laravel session cookies
-                    fetch("{{ route('dashboard') }}", { method: 'GET', credentials: 'same-origin' }).catch(() => {});
+                    this.pingServer();
+                },
+
+                pingServer() {
+                    this.lastPingTime = Date.now();
+                    fetch("{{ route('session.keepalive') }}", {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin'
+                    }).catch(() => {});
                 }
             };
         }

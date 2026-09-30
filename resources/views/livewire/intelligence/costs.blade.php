@@ -30,7 +30,7 @@
 
     <x-page-header title="Transport Cost Analysis" subtitle="Per-center and per-trip cost breakdowns linked to field operations.">
         <x-slot:actions>
-            <x-btn icon="download" wire:click="exportCsv">CSV</x-btn>
+            <x-btn icon="download" @click="$dispatch('open-modal', 'export-costs')">Export CSV</x-btn>
             <x-btn icon="file-text" @click="window.print()">Print / PDF</x-btn>
             @if($canRecalculateCosts)
                 <x-btn variant="primary" icon="calculator"
@@ -53,7 +53,7 @@
 
         <x-slot:actions>
             @if($canRecalculateCosts)
-                <x-btn size="sm" variant="secondary" icon="refresh-cw" wire:click="recalculateAll" wire:loading.attr="disabled">
+                <x-btn size="sm" variant="secondary" icon="refresh-cw" wire:click="recalculateAll" wire:loading.attr="disabled" wire:target="recalculateAll">
                     <span wire:loading.remove wire:target="recalculateAll">Sync All</span>
                     <span wire:loading wire:target="recalculateAll">Syncing...</span>
                 </x-btn>
@@ -74,7 +74,16 @@
             </x-slot:head>
 
             @forelse($costs as $i => $row)
-                <tr data-row data-trip="{{ $row->trip?->trip_number }}" data-center="{{ $row->center_code }}" data-fuel="{{ $row->fuel_cost }}" data-expenses="{{ $row->expense_cost }}" data-maintenance="{{ $row->maintenance_allocation }}" data-total="{{ $row->total_cost }}" data-cpk="{{ $row->cost_per_km }}" data-status="{{ $row->status }}"
+                <tr wire:key="cost-row-{{ $row->id }}"
+                    data-row
+                    data-trip="{{ $row->trip?->trip_number }}"
+                    data-center="{{ $row->center_code }}"
+                    data-fuel="{{ $row->fuel_cost }}"
+                    data-expenses="{{ $row->expense_cost }}"
+                    data-maintenance="{{ $row->maintenance_allocation }}"
+                    data-total="{{ $row->total_cost }}"
+                    data-cpk="{{ $row->cost_per_km }}"
+                    data-status="{{ $row->status }}"
                     class="transition-colors hover:bg-primary-50 {{ $i % 2 ? 'bg-neutral-50' : '' }}">
                     <td data-label="Trip" class="px-3 py-2.5 font-medium tabular-nums text-neutral-800">
                         {{ $row->trip?->trip_number ?? '-' }}
@@ -100,8 +109,11 @@
                         @if($canRecalculateCosts && $row->trip_id)
                             <x-btn size="xs" variant="ghost" icon="refresh-cw"
                                 wire:click="recalculateSingle({{ $row->trip_id }})"
+                                wire:loading.attr="disabled"
+                                wire:target="recalculateSingle({{ $row->trip_id }})"
                                 title="Recalculate this trip">
-                                Sync
+                                <span wire:loading.remove wire:target="recalculateSingle({{ $row->trip_id }})">Sync</span>
+                                <span wire:loading wire:target="recalculateSingle({{ $row->trip_id }})">...</span>
                             </x-btn>
                         @endif
                     </td>
@@ -119,7 +131,8 @@
         <x-modal name="recalculate-cost" title="Recalculate Transport Cost" subtitle="Rebuild cost rollup from fuel, expenses, maintenance allocation, and distance." icon="calculator" size="md">
             <div class="space-y-4">
                 <x-form-field label="Select Trip to Recalculate" type="select" name="selected_trip"
-                    wire:model="selected_trip"
+                    wire:model.live="selected_trip"
+                    :value="$selected_trip"
                     :options="array_merge(['all' => '— All Completed & Active Trips —'], $tripOptions)"
                     required />
 
@@ -138,11 +151,21 @@
                 <x-btn @click="$dispatch('close-modal')">Cancel</x-btn>
                 <x-btn variant="primary" icon="refresh-cw"
                     wire:click="recalculate"
-                    wire:loading.attr="disabled">
+                    wire:loading.attr="disabled"
+                    wire:target="recalculate">
                     <span wire:loading.remove wire:target="recalculate">Run Recalculation</span>
                     <span wire:loading wire:target="recalculate">Calculating...</span>
                 </x-btn>
             </x-slot:footer>
         </x-modal>
     @endif
+
+    {{-- ── Export Modal ── --}}
+    <x-modal name="export-costs" title="Export Transport Cost Analysis" subtitle="Download full cost rollup records as CSV for financial audit and reconciliation." icon="download">
+        <p class="text-sm text-neutral-600 mb-4">Export transport cost breakdowns including fuel, approved expenses, maintenance allocations, and cost-per-kilometer metrics per trip.</p>
+        <x-slot:footer>
+            <x-btn @click="$dispatch('close-modal', 'export-costs')">Cancel</x-btn>
+            <x-btn variant="primary" icon="download" wire:click="exportCsv" @click="$dispatch('close-modal', 'export-costs')">Download CSV</x-btn>
+        </x-slot:footer>
+    </x-modal>
 </div>
